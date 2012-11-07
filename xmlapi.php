@@ -129,7 +129,9 @@
 class xmlapi {
 	// should debugging statements be printed?
 	private $debug			= false;
-	
+
+    private $debug_log = null;
+
 	// The host to connect to
 	private $host				=	'127.0.0.1';
 
@@ -256,7 +258,55 @@ class xmlapi {
 	/**
 	* Accessor Functions
 	**/
-	/**
+    /**
+     * Set debug log destination
+     *
+     * The log_debug_msg() uses the native error_log() function internally, this
+     *  will provide values to that functions optional parameters
+     *
+     * @param string $file location of custom debug log
+     *
+     * @return void
+     */
+    public function set_debug_location($file)
+    {
+        if (!is_string($file)) {
+            throw new InvalidArgumentException('File argument must be a string');
+        }
+        if ( file_exists($file) && !is_writable($file) ) {
+            throw new InvalidArgumentException('File already exist but is not writable');
+        } elseif ( !file_exists($file)) {
+            $dir = dirname($file);
+            if (!is_writable($dir)) {
+                throw new InvalidArgumentException('Path of file argument is not writable');
+            }
+            file_put_contents($file, ''); //this is faster than touch();
+        }
+        $this->debug_log = $file;
+    }
+    /**
+     * Write msg to debug log
+     * 
+     * debug log will be PHP's default as described here:
+     * http://us2.php.net/manual/en/function.error-log.php
+     * unless set_debug_location($custom_log_location) is call prior
+     *
+     * @param string $msg message to write in log
+     *
+     * @return void
+     */
+    public function log_debug_msg($msg)
+    {
+        if (!is_string($msg)) {
+            throw new InvalidArgumentException('Message argument must be a string');
+        }
+        if ($this->debug_log) {
+            error_log($msg, 3, $this->debug_log);
+        } else {
+            error_log($msg);
+        }
+    }
+    /**
 	* Return whether the debug option is set within the object
 	*
 	* @return boolean
@@ -626,8 +676,8 @@ class xmlapi {
 		$url =  $this->protocol . '://' . $this->host . ':' . $this->port . $query_type . $function;
 
 		if ($this->debug) {
-			error_log('URL: ' . $url);
-			error_log('DATA: ' . $args);
+			$this->log_debug_msg('URL: ' . $url);
+			$this->log_debug_msg('DATA: ' . $args);
 		}
 
 		// Set the $auth string
@@ -642,7 +692,7 @@ class xmlapi {
 		}
 		
 		if ($this->debug) {
-			error_log("Authentication Header: " . $authstr ."\n");
+			$this->log_debug_msg("Authentication Header: " . $authstr ."\n");
 		}
 
 		// Perform the query (or pass the info to the functions that actually do perform the query)
@@ -663,7 +713,7 @@ class xmlapi {
 		
 		// print out the response if debug mode is enabled.
 		if ($this->debug) {
-			error_log("RESPONSE:\n " . $response);
+			$this->log_debug_msg("RESPONSE:\n " . $response);
 		}
 		
 		// The only time a response should contain <html> is in the case of authentication error
@@ -671,11 +721,11 @@ class xmlapi {
 		
 		if (stristr($response, '<html>') == true) {
 			if (stristr($response, 'Login Attempt Failed') == true) {
-				error_log("Login Attempt Failed");
+				$this->log_debug_msg("Login Attempt Failed");
 				return;
 			}
 			if (stristr($response, 'action="/login/"') == true) {
-				error_log("Authentication Error");
+				$this->log_debug_msg("Authentication Error");
 				return;
 			}
 			return;
@@ -686,11 +736,11 @@ class xmlapi {
 		if ( ($this->output == 'simplexml') || $this->output == 'array') {
 			$response = simplexml_load_string($response, null, LIBXML_NOERROR | LIBXML_NOWARNING);
 			if (!$response){
-			        error_log("Some error message here");
+			        $this->log_debug_msg("Some error message here");
 			        return;
 			}
 			if ( $this->debug ) {
-				error_log("SimpleXML var_dump:\n" . print_r($response, true));
+				$this->log_debug_msg("SimpleXML var_dump:\n" . print_r($response, true));
 			}
 		}
 		
@@ -698,7 +748,7 @@ class xmlapi {
 		if ($this->output == 'array') {
 			$response = $this->unserialize_xml($response);
 			if ( $this->debug ) {
-				error_log("Associative Array var_dump:\n" . print_r($response, true));
+				$this->log_debug_msg("Associative Array var_dump:\n" . print_r($response, true));
 			}
 		}
 		return $response;
@@ -796,12 +846,12 @@ class xmlapi {
 	*/
 	public function api1_query($user, $module, $function, $args = array() ) {
 		if ( !isset($module) || !isset($function) || !isset($user) ) {
-			error_log("api1_query requires that a module and function are passed to it");
+			$this->log_debug_msg("api1_query requires that a module and function are passed to it");
 			return false;
 		}
 		
 		if (!is_array($args)) {
-			error_log('api1_query requires that it is passed an array as the 4th parameter');
+			$this->log_debug_msg('api1_query requires that it is passed an array as the 4th parameter');
 			return false;
 		}
 		
@@ -848,11 +898,11 @@ class xmlapi {
 	
 	public function api2_query($user, $module, $function, $args = array()) {
 		if (!isset($user) || !isset($module) || !isset($function) ) {
-			error_log("api2_query requires that a username, module and function are passed to it");
+			$this->log_debug_msg("api2_query requires that a username, module and function are passed to it");
 			return false;
 		}
 		if (!is_array($args)) {
-			error_log("api2_query requires that an array is passed to it as the 4th parameter");
+			$this->log_debug_msg("api2_query requires that an array is passed to it as the 4th parameter");
 			return false;
 		}
 		
@@ -914,11 +964,11 @@ class xmlapi {
 	
 	public function createacct($acctconf) {
 		if (!is_array($acctconf)) {
-			error_log("createacct requires that first parameter passed to it is an array");
+			$this->log_debug_msg("createacct requires that first parameter passed to it is an array");
 			return false;
 		}
 		if (!isset($acctconf['username']) || !isset($acctconf['password']) || !isset($acctconf['domain'])) {
-			error_log("createacct requires that username, password & domain elements are in the array passed to it");
+			$this->log_debug_msg("createacct requires that username, password & domain elements are in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('createacct', $acctconf);
@@ -936,7 +986,7 @@ class xmlapi {
 	*/
 	public function passwd($username, $pass){
 		if (!isset($username) || !isset($pass)) {
-			error_log("passwd requires that an username and password are passed to it");
+			$this->log_debug_msg("passwd requires that an username and password are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('passwd', array('user' => $username, 'pass' => $pass));
@@ -954,7 +1004,7 @@ class xmlapi {
 	*/
 	public function limitbw($username, $bwlimit) {
 		if (!isset($username) || !isset($bwlimit)) {
-			error_log("limitbw requires that an username and bwlimit are passed to it");
+			$this->log_debug_msg("limitbw requires that an username and bwlimit are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('limitbw', array('user' => $username, 'bwlimit' => $bwlimit));
@@ -990,12 +1040,12 @@ class xmlapi {
 	*/
 	public function modifyacct($username, $args = array()) {
 		if (!isset($username)) {
-			error_log("modifyacct requires that username is passed to it");
+			$this->log_debug_msg("modifyacct requires that username is passed to it");
 			return false;
 		}
 		$args['user'] = $username;
 		if (sizeof($args) < 2) {
-			error_log("modifyacct requires that at least one attribute is passed to it");
+			$this->log_debug_msg("modifyacct requires that at least one attribute is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('modifyacct', $args);
@@ -1013,7 +1063,7 @@ class xmlapi {
 	*/
 	public function editquota($username, $quota) {
 		if (!isset($username) || !isset($quota)) {
-			error_log("editquota requires that an username and quota are passed to it");
+			$this->log_debug_msg("editquota requires that an username and quota are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('editquota', array('user' => $username, 'quota' => $quota));
@@ -1038,7 +1088,7 @@ class xmlapi {
 	*/
 	public function accountsummary($username) {
 		if (!isset($username)) {
-			error_log("accountsummary requires that an username is passed to it");
+			$this->log_debug_msg("accountsummary requires that an username is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('accountsummary', array('user' => $username));
@@ -1057,7 +1107,7 @@ class xmlapi {
 	*/
 	public function suspendacct($username, $reason = null) {
 		if (!isset($username)) {
-			error_log("suspendacct requires that an username is passed to it");
+			$this->log_debug_msg("suspendacct requires that an username is passed to it");
 			return false;
 		}
 		if ($reason) {
@@ -1091,7 +1141,7 @@ class xmlapi {
 	*/ 
 	public function removeacct($username, $keepdns = false) {
 		if (!isset($username)) {
-			error_log("removeacct requires that a username is passed to it");
+			$this->log_debug_msg("removeacct requires that a username is passed to it");
 			return false;
 		}
 		if ($keepdns) {
@@ -1111,7 +1161,7 @@ class xmlapi {
  	*/
 	public function unsuspendacct($username){
 		if (!isset($username)) {
-			error_log("unsuspendacct requires that a username is passed to it");
+			$this->log_debug_msg("unsuspendacct requires that a username is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('unsuspendacct', array('user' => $username));
@@ -1129,7 +1179,7 @@ class xmlapi {
 	*/ 
 	public function changepackage($username, $pkg) {
 		if (!isset($username) || !isset($pkg)) {
-			error_log("changepackage requires that username and pkg are passed to it");
+			$this->log_debug_msg("changepackage requires that username and pkg are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('changepackage', array('user' => $username, 'pkg' => $pkg));
@@ -1160,7 +1210,7 @@ class xmlapi {
 
 	public function domainuserdata( $domain ) {
 		if (!isset( $domain ) ) {
-			error_log("domainuserdata requires that domain is passed to it");
+			$this->log_debug_msg("domainuserdata requires that domain is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query("domainuserdata", array( 'domain' => $domain ) );
@@ -1180,12 +1230,12 @@ class xmlapi {
 	public function setsiteip ( $ip, $user = null, $domain = null ) {
 
 		if ( !isset($ip) ) {
-			error_log("setsiteip requires that ip is passed to it");
+			$this->log_debug_msg("setsiteip requires that ip is passed to it");
 			return false;
 		}
 
 		if ( $user == null && $domain == null ) {
-			error_log("setsiteip requires that either domain or user is passed to it");
+			$this->log_debug_msg("setsiteip requires that either domain or user is passed to it");
 			return false;
 		}
 
@@ -1214,7 +1264,7 @@ class xmlapi {
 	*/
 	public function adddns($domain, $ip) {
 		if (!isset($domain) || !isset($ip)) {
-			error_log("adddns require that domain, ip are passed to it");
+			$this->log_debug_msg("adddns require that domain, ip are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('adddns', array('domain' => $domain, 'ip' => $ip));
@@ -1234,7 +1284,7 @@ class xmlapi {
 	*/
 	public function addzonerecord( $zone, $args ) {
 		if (!is_array($args)) {
-			error_log("addzonerecord requires that $args passed to it is an array");
+			$this->log_debug_msg("addzonerecord requires that $args passed to it is an array");
 			return;
 		}
 		
@@ -1259,7 +1309,7 @@ class xmlapi {
 	
 	public function editzonerecord( $zone, $line, $args ) {
 		if (!is_array($args)) {
-			error_log("editzone requires that $args passed to it is an array");
+			$this->log_debug_msg("editzone requires that $args passed to it is an array");
 			return;
 		}
 		
@@ -1293,7 +1343,7 @@ class xmlapi {
 	*/
 	public function killdns($domain) {
 		if (!isset($domain)) {
-			error_log("killdns requires that domain is passed to it");
+			$this->log_debug_msg("killdns requires that domain is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('killdns', array('domain' => $domain));
@@ -1323,7 +1373,7 @@ class xmlapi {
 	*/
 	public function dumpzone($domain) {
 		if (!isset($domain)) {
-			error_log("dumpzone requires that a domain is passed to it");
+			$this->log_debug_msg("dumpzone requires that a domain is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('dumpzone', array('domain' => $domain));
@@ -1340,7 +1390,7 @@ class xmlapi {
 	*/
 	public function lookupnsip($nameserver) {
 		if (!isset($nameserver)) {
-			error_log("lookupnsip requres that a nameserver is passed to it");
+			$this->log_debug_msg("lookupnsip requres that a nameserver is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('lookupnsip', array('nameserver' => $nameserver));
@@ -1356,7 +1406,7 @@ class xmlapi {
 	*/
 	public function removezonerecord($zone, $line) {
 		if ( !isset($zone) || !isset($line) ) {
-			error_log("removezone record requires that a zone and line number is passed to it");
+			$this->log_debug_msg("removezone record requires that a zone and line number is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('removezonerecord', array('zone' => $zone, 'Line' => $line) );
@@ -1372,7 +1422,7 @@ class xmlapi {
 	*/
 	public function resetzone($domain) {
 		if ( !isset($domain) ) {
-			error_log("resetzone requires that a domain name is passed to it");
+			$this->log_debug_msg("resetzone requires that a domain name is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('resetzone', array('domain' => $domain));
@@ -1395,7 +1445,7 @@ class xmlapi {
 	*/
 	public function addpkg($pkg) {
 		if (!isset($pkg['name'])) {
-			error_log("addpkg requires that name is defined in the array passed to it");
+			$this->log_debug_msg("addpkg requires that name is defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('addpkg', $pkg);
@@ -1411,7 +1461,7 @@ class xmlapi {
 	*/
 	public function killpkg($pkgname) {
 		if(!isset($pkgname)) {
-			error_log("killpkg requires that the package name is passed to it");
+			$this->log_debug_msg("killpkg requires that the package name is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('killpkg', array('pkg' => $pkgname));
@@ -1429,7 +1479,7 @@ class xmlapi {
 	*/
 	public function editpkg($pkg) {
 		if (!$isset($pkg['name'])) {
-			error_log("editpkg requires that name is defined in the array passed to it");
+			$this->log_debug_msg("editpkg requires that name is defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('editpkg', $pkg);
@@ -1463,7 +1513,7 @@ class xmlapi {
 	*/
 	public function setupreseller($username, $makeowner = true) {
 		if (!isset($username)) {
-			error_log("setupreseller requires that username is passed to it");
+			$this->log_debug_msg("setupreseller requires that username is passed to it");
 			return false;
 		}
 		if ($makeowner) {
@@ -1484,7 +1534,7 @@ class xmlapi {
 	*/
 	public function saveacllist($acl) {
 		if (!isset($acl['acllist'])) {
-			error_log("saveacllist requires that acllist is defined in the array passed to it");
+			$this->log_debug_msg("saveacllist requires that acllist is defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('saveacllist', $acl);
@@ -1524,7 +1574,7 @@ class xmlapi {
 	*/
 	public function resellerstats($username) {
 		if (!isset($username)) {
-			error_log("resellerstats requires that a username is passed to it");
+			$this->log_debug_msg("resellerstats requires that a username is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('resellerstats', array('reseller' => $username));
@@ -1541,7 +1591,7 @@ class xmlapi {
 	*/
 	public function unsetupreseller($username) {
 		if (!isset($username)) {
-			error_log("unsetupreseller requires that a username is passed to it");
+			$this->log_debug_msg("unsetupreseller requires that a username is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('unsetupreseller', array('user' => $username));
@@ -1559,7 +1609,7 @@ class xmlapi {
 	*/
 	public function setacls($acl) {
 		if (!isset($acl['reseller'])) {
-			error_log("setacls requires that reseller is defined in the array passed to it");
+			$this->log_debug_msg("setacls requires that reseller is defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('setacls', $acl);
@@ -1578,7 +1628,7 @@ class xmlapi {
 	**/
 	public function terminatereseller($reseller, $terminatereseller = true) {
 		if (!isset($reseller)) {
-			error_log("terminatereseller requires that username is passed to it");
+			$this->log_debug_msg("terminatereseller requires that username is passed to it");
 			return false;
 		}
 		$verify = 'I understand this will irrevocably remove all the accounts owned by the reseller ' . $reseller;
@@ -1600,7 +1650,7 @@ class xmlapi {
 	*/
 	public function setresellerips($user, $ip = null) {
 		if (!isset($user) ) {
-			error_log("setresellerips requires that a username is passed to it");
+			$this->log_debug_msg("setresellerips requires that a username is passed to it");
 			return false;
 		}
 		$params = array("user" => $user);
@@ -1625,7 +1675,7 @@ class xmlapi {
 	*/
 	public function setresellerlimits( $reseller_cfg ) {
 		if ( !isset($reseller_cfg['user'] ) ) {
-			error_log("setresellerlimits requires that a user is defined in the array passed to it");
+			$this->log_debug_msg("setresellerlimits requires that a user is defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('setresellerlimits',$reseller_cfg);
@@ -1643,7 +1693,7 @@ class xmlapi {
 	*/
 	public function setresellermainip($reseller, $ip) {
 		if ( !isset($reseller) || !isset($ip) ) {
-			error_log("setresellermainip requires that an reseller and ip are passed to it");
+			$this->log_debug_msg("setresellermainip requires that an reseller and ip are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query("setresellermainip", array('user' => $reseller, 'ip' => $ip));
@@ -1663,14 +1713,14 @@ class xmlapi {
 	*/
 	public function setresellerpackagelimits($user, $no_limit, $package = null, $allowed = null, $number = null) {
 		if (!isset($user) || !isset($no_limit) ) {
-			error_log("setresellerpackagelimits requires that a username and no_limit are passed to it by default");
+			$this->log_debug_msg("setresellerpackagelimits requires that a username and no_limit are passed to it by default");
 			return false;
 		}
 		if ($no_limit) {
 			return $this->xmlapi_query("setresellerpackagelimits", array( 'user' => $user, "no_limit" => '1') );
 		} else {
 			if ( is_null($package) || is_null($allowed) ) {
-				error_log('setresellerpackagelimits requires that package and allowed are passed to it if no_limit eq 0');
+				$this->log_debug_msg('setresellerpackagelimits requires that package and allowed are passed to it if no_limit eq 0');
 				return false;
 			}
 			$params = array(
@@ -1701,7 +1751,7 @@ class xmlapi {
 	*/
 	public function suspendreseller($reseller, $reason = null) {
 		if (!isset($reseller) ) { 
-			error_log("suspendreseller requires that the reseller's username is passed to it");
+			$this->log_debug_msg("suspendreseller requires that the reseller's username is passed to it");
 			return false;
 		}
 		$params = array("user" => $reseller);
@@ -1722,7 +1772,7 @@ class xmlapi {
 	*/
 	public function unsuspendreseller($user) {
 		if (!isset($user) ) {
-			error_log("unsuspendreseller requires that a username is passed to it");
+			$this->log_debug_msg("unsuspendreseller requires that a username is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('unsuspendreseller', array('user' => $user));
@@ -1738,7 +1788,7 @@ class xmlapi {
 	*/
 	public function acctcounts($user) {
 		if (!isset($user)) {
-			error_log('acctcounts requires that a username is passed to it');
+			$this->log_debug_msg('acctcounts requires that a username is passed to it');
 			return false;
 		}
 		return $this->xmlapi_query('acctcounts', array('user' => $user) );
@@ -1756,7 +1806,7 @@ class xmlapi {
 	*/
 	public function setresellernameservers($user, $nameservers = null) {
 		if (!isset($user)) {
-			error_log("setresellernameservers requires that a username is passed to it");
+			$this->log_debug_msg("setresellernameservers requires that a username is passed to it");
 			return false;
 		}
 		$params = array('user' => $user);
@@ -1847,7 +1897,7 @@ class xmlapi {
 	*/
 	public function addip($ip, $netmask) {
 		if (!isset($ip) || !isset($netmask)) {
-			error_log("addip requires that an IP address and Netmask are passed to it");
+			$this->log_debug_msg("addip requires that an IP address and Netmask are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('addip', array('ip' => $ip, 'netmask' => $netmask));
@@ -1867,7 +1917,7 @@ class xmlapi {
 	public function delip($ip, $ethernetdev = null, $skipifshutdown = false) {
 		$args = array();
 		if (!isset($ip)) {
-			error_log("delip requires that an IP is defined in the array passed to it");
+			$this->log_debug_msg("delip requires that an IP is defined in the array passed to it");
 			return false;
 		}
 		$args['ip'] = $ip;
@@ -1899,7 +1949,7 @@ class xmlapi {
 	*/
 	public function sethostname($hostname) {
 		if (!isset($hostname)) {
-			error_log("sethostname requires that hostname is passed to it");
+			$this->log_debug_msg("sethostname requires that hostname is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('sethostname', array('hostname' => $hostname));
@@ -1919,7 +1969,7 @@ class xmlapi {
 	public function setresolvers($nameserver1, $nameserver2 = null, $nameserver3 = null) {
 		$args = array();
 		if (!isset($nameserver1)) {
-			error_log("setresolvers requires that nameserver1 is defined in the array passed to it");
+			$this->log_debug_msg("setresolvers requires that nameserver1 is defined in the array passed to it");
 			return false;
 		}
 		$args['nameserver1'] = $nameserver1;
@@ -1951,7 +2001,7 @@ class xmlapi {
 
 	public function nvset($key, $value) {
 		if (!isset($key) || !isset($value)) {
-			error_log("nvset requires that key and value are passed to it");
+			$this->log_debug_msg("nvset requires that key and value are passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('nvset', array('key' => $key, 'value' => $value));
@@ -1960,7 +2010,7 @@ class xmlapi {
 	// This function allows you to retrieve and view a non-volatile variable's value.
 	public function nvget($key) {
 		if (!isset($key)) {
-			error_log("nvget requires that key is passed to it");
+			$this->log_debug_msg("nvget requires that key is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('nvget', array('key' => $key));
@@ -1980,7 +2030,7 @@ class xmlapi {
 	*/
 	public function restartsrv($service) {
 		if (!isset($service)) {
-			error_log("restartsrv requires that service is passed to it");
+			$this->log_debug_msg("restartsrv requires that service is passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('restartservice', array('service' => $service));
@@ -2016,7 +2066,7 @@ class xmlapi {
 	*/
 	public function configureservice($service, $enabled = true, $monitored = true) {
 		if (!isset($service)) {
-			error_log("configure service requires that a service is passed to it");
+			$this->log_debug_msg("configure service requires that a service is passed to it");
 			return false;
 		}
 		$params = array('service' => $service);
@@ -2051,7 +2101,7 @@ class xmlapi {
 	*/
 	public function fetchsslinfo($args) {
 		if ( (isset($args['domain']) && isset($args['crtdata'])) || (!isset($args['domain']) && !isset($args['crtdata'])) ) {
-			error_log("fetchsslinfo requires domain OR crtdata is passed to it");
+			$this->log_debug_msg("fetchsslinfo requires domain OR crtdata is passed to it");
 		}
 		if (isset($args['crtdata'])) {
 			// crtdata must be URL-encoded!
@@ -2070,7 +2120,7 @@ class xmlapi {
 	*/
 	public function generatessl($args) {
 		if (!isset($args['xemail']) || !isset($args['host']) || !isset($args['country']) || !isset($args['state']) || !isset($args['city']) || !isset($args['co']) || !isset($args['cod']) || !isset($args['email']) || !isset($args['pass'])) {
-			error_log("generatessl requires that xemail, host, country, state, city, co, cod, email and pass are defined in the array passed to it");
+			$this->log_debug_msg("generatessl requires that xemail, host, country, state, city, co, cod, email and pass are defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('generatessl', $args);
@@ -2087,7 +2137,7 @@ class xmlapi {
 	*/
 	public function installssl($args) {
 		if (!isset($args['user']) || !isset($args['domain']) || !isset($args['cert']) || !isset($args['key']) || !isset($args['cab']) || !isset($args['ip'])) {
-			error_log("installssl requires that user, domain, cert, key, cab and ip are defined in the array passed to it");
+			$this->log_debug_msg("installssl requires that user, domain, cert, key, cab and ip are defined in the array passed to it");
 			return false;
 		}
 		return $this->xmlapi_query('installssl', $args);
@@ -2113,11 +2163,11 @@ class xmlapi {
 	// This API1 function adds a emailaccount for a specific user.
 	public function addpop($username, $args) {
 		if (!isset($username) || !isset($args)) {
-			error_log("addpop requires that a user and args are passed to it");
+			$this->log_debug_msg("addpop requires that a user and args are passed to it");
 			return false;
 		}
 		if (is_array($args) && (sizeof($args) < 3)) {
-			error_log("addpop requires that args at least contains an email_username, email_password and email_domain");
+			$this->log_debug_msg("addpop requires that args at least contains an email_username, email_password and email_domain");
 			return false;
 		}
 		return $this->api1_query($username, 'Email', 'addpop', $args);
@@ -2127,7 +2177,7 @@ class xmlapi {
 	public function park($username, $newdomain, $topdomain) {
 		$args = array();
 		if ( (!isset($username)) && (!isset($newdomain)) ) {
-			error_log("park requires that a username and new domain are passed to it");
+			$this->log_debug_msg("park requires that a username and new domain are passed to it");
 			return false;
 		}
 		$args['domain'] = $newdomain;
@@ -2141,7 +2191,7 @@ class xmlapi {
 	public function unpark($username, $domain) {
 		$args = array();
 		if ( (!isset($username)) && (!isset($domain)) ) {
-			error_log("unpark requires that a username and domain are passed to it");
+			$this->log_debug_msg("unpark requires that a username and domain are passed to it");
 			return false;
 		}
 		$args['domain'] = $domain;
@@ -2157,11 +2207,11 @@ class xmlapi {
 	// This API2 function allows you to view the diskusage of a emailaccount.
 	public function getdiskusage($username, $args) {
 		if (!isset($username) || !isset($args)) {
-			error_log("getdiskusage requires that a username and args are passed to it");
+			$this->log_debug_msg("getdiskusage requires that a username and args are passed to it");
 			return false;
 		}
 		if (is_array($args) && (!isset($args['domain']) || !isset($args['login']))) {
-			error_log("getdiskusage requires that args at least contains an email_domain and email_username");
+			$this->log_debug_msg("getdiskusage requires that args at least contains an email_domain and email_username");
 			return false;
 		}
 		return $this->api2_query($username, 'Email', 'getdiskusage', $args);
@@ -2170,7 +2220,7 @@ class xmlapi {
 	// This API2 function allows you to list ftp-users associated with a cPanel account including disk information.
 	public function listftpwithdisk($username) {
 		if (!isset($username)) {
-			error_log("listftpwithdisk requires that user is passed to it");
+			$this->log_debug_msg("listftpwithdisk requires that user is passed to it");
 			return false;
 		}
 		return $this->api2_query($username, 'Ftp', 'listftpwithdisk');
@@ -2179,7 +2229,7 @@ class xmlapi {
 	// This API2 function allows you to list ftp-users associated with a cPanel account.
 	public function listftp($username) {
 		if (!isset($username)) {
-			error_log("listftp requires that user is passed to it");
+			$this->log_debug_msg("listftp requires that user is passed to it");
 			return false;
 		}
 		return $this->api2_query($username, 'Ftp', 'listftp');
@@ -2189,7 +2239,7 @@ class xmlapi {
 	public function listparkeddomains($username, $domain = null) {
 		$args = array();
 		if (!isset($username)) {
-			error_log("listparkeddomains requires that a user is passed to it");
+			$this->log_debug_msg("listparkeddomains requires that a user is passed to it");
 			return false;
 		}
 		if (isset($domain)) {
@@ -2203,7 +2253,7 @@ class xmlapi {
 	public function listaddondomains($username, $domain = null) {
 		$args = array();
 		if (!isset($username)) {
-			error_log("listaddondomains requires that a user is passed to it");
+			$this->log_debug_msg("listaddondomains requires that a user is passed to it");
 			return false;
 		}
 		if (isset($domain)) {
@@ -2216,7 +2266,7 @@ class xmlapi {
 	// This API function displays a list of all selected stats for a specific user.
 	public function stat($username, $args = null) {
 		if ( (!isset($username)) || (!isset($args)) ) {
-			error_log("stat requires that a username and options are passed to it");
+			$this->log_debug_msg("stat requires that a username and options are passed to it");
 			return false;
 		}
 		if (is_array($args)) {
